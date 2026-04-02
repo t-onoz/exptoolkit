@@ -34,4 +34,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["exptoolkit*"]
+include = ["exptoolkit*", "batanalysis*"]
