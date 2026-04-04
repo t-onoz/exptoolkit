@@ -8,3 +8,7 @@ from exptoolkit.repository._repo import (
     DataResource,
     ResourceRepo,
 )
+from exptoolkit.repository._scanner import(
+    ScanResult,
+    ResourceScanner,
+)
