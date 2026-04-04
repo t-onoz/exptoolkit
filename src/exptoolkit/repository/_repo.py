@@ -1,8 +1,10 @@
 from __future__ import annotations
 import re
 import typing as t
+import json
+import os
 from collections.abc import Iterable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 
 @dataclass(frozen=True)
 class DataResource:
@@ -17,10 +19,11 @@ class DataResource:
     ref: str
     type_: str | None = field(hash=False, default=None, compare=False)
 
+MID = t.Union[int, float, str]
 
 @dataclass(frozen=True)
 class MeasurementID:
-    value: t.Hashable
+    value: MID
 
 @dataclass(frozen=True)
 class Measurement:
@@ -42,7 +45,7 @@ class ResourceRepo:
         self._d2samples: dict[DataResource, set[str]] = {}
 
     def add(self, ref: str, *,
-            measurement_id: t.Hashable,
+            measurement_id: MID,
             samples: str | Iterable[str],
             data_type: str | None = None
             ) -> DataResource:
@@ -59,10 +62,7 @@ class ResourceRepo:
             The registered DataSource.
         """
         dr = DataResource(ref, data_type)
-        if isinstance(measurement_id, MeasurementID):
-            mid = measurement_id
-        else:
-            mid = MeasurementID(measurement_id)
+        mid = MeasurementID(measurement_id)
 
         # enforce many-to-one relation between DataResource and Measurement
         if dr in self._d2m:
@@ -128,7 +128,7 @@ class ResourceRepo:
         data_type = dr_before.type_
 
         self.remove(ref_before)
-        self.add(ref_after, measurement_id=mid, samples=samples, data_type=data_type)
+        self.add(ref_after, measurement_id=mid.value, samples=samples, data_type=data_type)
 
     @t.overload
     def by_sample(self, sample, *, regex = ..., with_key: t.Literal[False] = False
@@ -171,16 +171,16 @@ class ResourceRepo:
             return {sample: list(self._sample2d.get(sample, set()))}
         return list(self._sample2d.get(sample, set()))
 
-    def by_measurement(self, measurement_id: t.Hashable) -> list[DataResource]:
+    def by_measurement(self, id_: MID) -> list[DataResource]:
         """Return data sources belonging to a measurement.
 
         Args:
-            measurement_id: Measurement identifier.
+            id_: Measurement identifier.
 
         Returns:
             Matching data sources.
         """
-        return list(self._m2d.get(MeasurementID(measurement_id), set()))
+        return list(self._m2d.get(MeasurementID(id_), set()))
 
     def measurement_of(self, resource: str | DataResource) -> MeasurementID:
         """Return the measurement of a data source.
@@ -223,16 +223,16 @@ class ResourceRepo:
     def as_list(self):
         return list(self._ref2d.values())
 
-    def get_measurement(self, measurement_id: t.Hashable) -> Measurement:
+    def get_measurement(self, id_: MID) -> Measurement:
         """Return a measurement view.
 
         Args:
-            measurement_id: Measurement identifier.
+            id_: Measurement identifier.
 
         Returns:
             Measurement with its data sources.
         """
-        mid = MeasurementID(measurement_id)
+        mid = MeasurementID(id_)
         if mid not in self._m2d:
             raise ValueError(f"Measurement {mid} does not exist in the repository.")
         data = tuple(self._m2d[mid])
@@ -265,4 +265,52 @@ class ResourceRepo:
             assert dr in self._d2m, f"{dr} missing in _d2m"
             assert dr in self._d2samples, f"{dr} missing in _d2samples"
 
-        print("All indexes are consistent ✅")
+    def save(self, file: str | os.PathLike | t.IO[str],
+             indent=2, ensure_ascii=False) -> None:
+        """Save ResourceRepo to a JSON file."""
+        data = {
+            "resources": [
+                {"ref": dr.ref, "type": dr.type_} for dr in self._ref2d.values()
+            ],
+            "d2m": {dr.ref: mid.value for dr, mid in self._d2m.items()},
+            "d2samples": {dr.ref: list(samples) for dr, samples in self._d2samples.items()},
+        }
+        if isinstance(file, (str, os.PathLike)):
+            with open(file, "w", encoding='utf-8') as f:
+                json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii)
+        else:
+            json.dump(data, file, indent=indent, ensure_ascii=ensure_ascii)
+
+    @classmethod
+    def load(cls, file: str | os.PathLike | t.IO[str]) -> ResourceRepo:
+        """Load ResourceRepo from a JSON file."""
+        if isinstance(file, (str, os.PathLike)):
+            with open(file, encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = json.load(file)
+
+        repo = ResourceRepo()
+
+        # 1. resources
+        for dr_dict in data["resources"]:
+            ref = dr_dict["ref"]
+            type_ = dr_dict.get("type")
+            dr = DataResource(ref, type_)
+            repo._ref2d[ref] = dr
+
+        # 2. d2m and m2d
+        for ref, mid_val in data["d2m"].items():
+            dr = repo._ref2d[ref]
+            mid = MeasurementID(mid_val)
+            repo._d2m[dr] = mid
+            repo._m2d.setdefault(mid, set()).add(dr)
+
+        # 3. d2samples and sample2d
+        for ref, samples in data["d2samples"].items():
+            dr = repo._ref2d[ref]
+            repo._d2samples[dr] = set(samples)
+            for s in samples:
+                repo._sample2d.setdefault(s, set()).add(dr)
+
+        return repo

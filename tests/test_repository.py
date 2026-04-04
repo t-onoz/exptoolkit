@@ -2,6 +2,7 @@
 import pytest
 from exptoolkit.repository import ResourceRepo  # type: ignore[import]
 from exptoolkit.repository._repo import MeasurementID  # type: ignore[import]
+from tempfile import NamedTemporaryFile
 
 def test_add_and_lookup():
     repo = ResourceRepo()
@@ -105,3 +106,21 @@ def test_multiple_measurements():
     m1_set = repo.by_measurement("m1")
     assert dr1 in m1_set
     assert dr2 not in m1_set
+
+def test_save_and_load():
+    repo = ResourceRepo()
+    dr1 = repo.add("file1", measurement_id="m1", samples="s1")
+    dr2 = repo.add("file2", measurement_id="m2", samples="s1")
+    repo._check_indexes()
+
+    with NamedTemporaryFile(mode='w+') as tmp:
+        repo.save(tmp)
+        tmp.seek(0)
+        repo2 = ResourceRepo.load(tmp)
+
+    repo2._check_indexes()
+    assert dr1 in repo2.as_list()
+    assert dr2 in repo2.as_list()
+    assert "s1" in repo2._sample2d
+    assert MeasurementID("m1") in repo2._m2d
+    assert MeasurementID("m2") in repo2._m2d
