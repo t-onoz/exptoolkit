@@ -3,11 +3,9 @@ import re
 import typing as t
 import json
 import os
-from collections.abc import Iterable, Callable
-from dataclasses import dataclass, field, asdict
+from pydantic import BaseModel, ConfigDict, Field
 
-@dataclass(frozen=True)
-class DataResource:
+class DataResource(BaseModel):
     """
     Identifies an external resource as a string. `ref` can point to local files, URLs,
     or files inside archives (nested paths via "::" like "inner/path::archive.zip").
@@ -16,37 +14,44 @@ class DataResource:
 
     `type_` represents additional information about a resource ("raw", "csv", etc.).
     """
+    model_config = ConfigDict(frozen=True)
     ref: str
-    type_: str | None = field(hash=False, default=None, compare=False)
+    type_: str | None = Field(default=None)
 
 MID = t.Union[int, float, str]
 
-@dataclass(frozen=True)
-class MeasurementID:
-    value: MID
-
-@dataclass(frozen=True)
-class Measurement:
-    id_: MeasurementID
-    data: tuple[DataResource, ...]
-    samples: tuple[str, ...]
-
+class MeasurementID(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    value: MID  # float as id is accepted, though not recommended
 
 class ResourceRepo:
+    """
+    Repository managing data sources and their association with measurements and samples.
+
+    Responsibilities:
+        - Add/remove DataResource with a MeasurementID and sample names.
+        - Lookup resources by sample (exact or regex) or by measurement.
+        - Provide Measurement views combining resources and samples.
+        - Maintain internal bidirectional indices for fast queries.
+
+    Notes:
+        - Each DataResource belongs to exactly one MeasurementID (many-to-one).
+        - Sample names can be shared across resources and measurements.
+    """
     def __init__(self) -> None:
         self._ref2d: dict[str, DataResource] = {}
 
         # relations
-        self._d2m: dict[DataResource, MeasurementID] = {}
-        self._m2d: dict[MeasurementID, set[DataResource]] = {}
+        self._ref2m: dict[str, MeasurementID] = {}
+        self._m2ref: dict[MeasurementID, set[str]] = {}
 
         # sample index
-        self._sample2d: dict[str, set[DataResource]] = {}
-        self._d2samples: dict[DataResource, set[str]] = {}
+        self._sample2ref: dict[str, set[str]] = {}
+        self._ref2samples: dict[str, set[str]] = {}
 
     def add(self, ref: str, *,
-            measurement_id: MID,
-            samples: str | Iterable[str],
+            measurement_id: MID | MeasurementID,
+            samples: str | t.Iterable[str],
             data_type: str | None = None
             ) -> DataResource:
         """Register a data source and its relations.
@@ -61,30 +66,32 @@ class ResourceRepo:
         Returns:
             The registered DataSource.
         """
-        dr = DataResource(ref, data_type)
-        mid = MeasurementID(measurement_id)
+        dr = DataResource(ref=ref, type_=data_type)
+        if isinstance(measurement_id, MeasurementID):
+            mid = measurement_id
+        else:
+            mid = MeasurementID(value=measurement_id)
 
         # enforce many-to-one relation between DataResource and Measurement
-        if dr in self._d2m:
-            existing_mid = self._d2m[dr]
+        if dr.ref in self._ref2m:
+            existing_mid = self._ref2m[dr.ref]
             if existing_mid != mid:
                 raise ValueError(
                     f"DataResource {dr.ref} is already assigned to Measurement {existing_mid}, "
                     f"cannot reassign to {mid}."
                 )
 
-        self._ref2d.setdefault(ref, dr)
-        self._d2m[dr] = mid
-        self._m2d.setdefault(mid, set()).add(dr)
+        self._ref2d[ref] = dr
+        self._ref2m[dr.ref] = mid
+        self._m2ref.setdefault(mid, set()).add(dr.ref)
 
-        if isinstance(samples, str):
-            samples = [samples]
-        else:
-            samples = list(samples)
-        self._d2samples.setdefault(dr, set())
+        samples = [samples] if isinstance(samples, str) else samples
+        if not samples:
+            raise ValueError('samples must not be empty.')
+
         for s in samples:
-            self._sample2d.setdefault(s, set()).add(dr)
-            self._d2samples[dr].add(s)
+            self._sample2ref.setdefault(s, set()).add(dr.ref)
+            self._ref2samples.setdefault(dr.ref, set()).add(s)
 
         return dr
 
@@ -100,21 +107,21 @@ class ResourceRepo:
         except KeyError as e:
             raise ValueError(f'{repr(ref)} does not exist in repository.') from e
 
-        mid = self._d2m[dr]
-        samples = self._d2samples[dr]
+        mid = self._ref2m[ref]
+        samples = self._ref2samples[ref].copy()
 
-        self._d2m.pop(dr)
-        self._m2d[mid].discard(dr)
-        self._d2samples.pop(dr)
+        self._ref2m.pop(ref)
+        self._m2ref[mid].discard(dr.ref)
+        self._ref2samples.pop(ref)
         for sample in samples:
-            self._sample2d[sample].discard(dr)
+            self._sample2ref[sample].discard(dr.ref)
 
         # remove measurement and samples if no data is associated
-        if not self._m2d[mid]:
-            self._m2d.pop(mid)
+        if not self._m2ref[mid]:
+            self._m2ref.pop(mid)
         for sample in samples:
-            if not self._sample2d[sample]:
-                self._sample2d.pop(sample)
+            if not self._sample2ref[sample]:
+                self._sample2ref.pop(sample)
 
     def move_resource(self, ref_before: str, ref_after: str) -> None:
         if ref_before not in self._ref2d:
@@ -123,78 +130,39 @@ class ResourceRepo:
             raise ValueError(f'Cannot move resource because {repr(ref_after)} already exists.')
 
         dr_before = self._ref2d[ref_before]
-        mid = self._d2m[dr_before]
-        samples = self._d2samples[dr_before]
+        mid = self._ref2m[ref_before]
+        samples = self._ref2samples[ref_before]
         data_type = dr_before.type_
 
         self.remove(ref_before)
         self.add(ref_after, measurement_id=mid.value, samples=samples, data_type=data_type)
 
-    @t.overload
-    def by_sample(self, sample, *, regex = ..., with_key: t.Literal[False] = False
-    ) -> list[DataResource]: ...
+    def by_sample(self, sample: str) -> list[DataResource]:
+        """Find resources by sample name (exact match, fast)."""
+        return [self._ref2d[ref] for ref in self._sample2ref.get(sample, set())]
 
-    @t.overload
-    def by_sample(self, sample, *, regex = ..., with_key: t.Literal[True] = True
-    ) -> dict[str, list[DataResource]]: ...
-
-    def by_sample(self, sample: str, *, regex=False, with_key=False):
-        """Find measurements by sample name.
-
-        Args:
-            sample (str): Sample name or pattern.
-            regex (bool, optional):
-                If True, ``name`` is treated as a regular expression. This is slower but more flexible.
-                Defaults to False.
-            with_key (bool, optional):
-                If False (default), returns a flat list of unique ``DataResource`` objects
-                that match the query.
-
-                If True, returns a mapping object from sample name to resources:
-                ``dict[str, list[DataResource]]``
-                 This is useful when you need to know which sample names were matched
-                (especially in regex mode).
-        """
-        if regex:
-            ptn = re.compile(sample)
-            if with_key:
-                return {s: list(dr_set)
-                        for s, dr_set in self._sample2d.items()
-                        if ptn.search(s)}
-            return list({
-                dr
-                for s, dr_set in self._sample2d.items()
-                for dr in dr_set
-                if ptn.search(s)
-                })
-        if with_key:
-            return {sample: list(self._sample2d.get(sample, set()))}
-        return list(self._sample2d.get(sample, set()))
+    def by_sample_regex(self, pattern: str) -> dict[str, list[DataResource]]:
+        """Find resources by sample name (O(N), slower). Returns mapping from sample to resources."""
+        ptn = re.compile(pattern)
+        return {s: [self._ref2d[ref] for ref in ref_set]
+                for s, ref_set in self._sample2ref.items()
+                if ptn.search(s)}
 
     def by_measurement(self, id_: MID) -> list[DataResource]:
-        """Return data sources belonging to a measurement.
+        """Return data sources belonging to a measurement."""
+        return [self._ref2d[ref] for ref in self._m2ref.get(MeasurementID(value=id_), set())]
 
-        Args:
-            id_: Measurement identifier.
-
-        Returns:
-            Matching data sources.
-        """
-        return list(self._m2d.get(MeasurementID(id_), set()))
+    def samples_by_measurement(self, id_: MID) -> list[str]:
+        """Return unique sample names associated with a measurement."""
+        refs = self._m2ref.get(MeasurementID(value=id_), set())
+        return list({
+            s for ref in refs for s in self._ref2samples[ref]
+        })
 
     def measurement_of(self, resource: str | DataResource) -> MeasurementID:
-        """Return the measurement of a data source.
-
-        Args:
-            resource: Data source.
-
-        Returns:
-            Associated measurement ID.
-        """
-        if isinstance(resource, str):
-            resource = self._ref2d[resource]
-        mid = self._d2m[resource]
-        return mid
+        """Return the measurement of a data source (ref string or `DataResource` object)."""
+        ref = resource.ref if isinstance(resource, DataResource) else str(resource)
+        return self._ref2m[ref]
 
     def samples_of(self, resource: str | DataResource) -> list[str]:
         """Return samples associated with a data source.
@@ -205,75 +173,52 @@ class ResourceRepo:
         Returns:
             Associated sample names.
         """
-        if isinstance(resource, str):
-            resource = self._ref2d[resource]
-        return list(self._d2samples.get(resource, set()))
+        ref = resource.ref if isinstance(resource, DataResource) else str(resource)
+        return list(self._ref2samples.get(ref, set()))
 
-    def find(self, f: Callable[[DataResource], bool]) -> list[DataResource]:
-        """Return data sources matching a predicate.
-
-        Args:
-            f: Function taking a DataSource and returning bool.
-
-        Returns:
-            Matching data sources.
-        """
-        return [ds for ds in self._ref2d.values() if f(ds)]
-
-    def as_list(self):
-        return list(self._ref2d.values())
-
-    def get_measurement(self, id_: MID) -> Measurement:
-        """Return a measurement view.
-
-        Args:
-            id_: Measurement identifier.
-
-        Returns:
-            Measurement with its data sources.
-        """
-        mid = MeasurementID(id_)
-        if mid not in self._m2d:
-            raise ValueError(f"Measurement {mid} does not exist in the repository.")
-        data = tuple(self._m2d[mid])
-        samples = tuple({s for dr in data for s in self._d2samples[dr]})
-        return Measurement(id_=mid, data=data, samples=samples)
+    def iter_resources(self) -> t.Iterator[DataResource]:
+        """Iterate over all registered DataResource objects."""
+        return iter(self._ref2d.values())
 
     def _check_indexes(self) -> None:
-        """Verify internal index consistency. Raises AssertionError if any mismatch."""
+        """Verify internal index consistency.
 
-        # 1. _d2m vs. _m2d
-        for dr, mid in self._d2m.items():
-            assert dr in self._m2d.get(mid, set()), f"{dr} missing in _m2d[{mid}]"
-
-        for mid, dr_set in self._m2d.items():
-            for dr in dr_set:
-                assert self._d2m.get(dr) == mid, f"{dr} in _m2d[{mid}] but _d2m mismatch"
-
-        # 2. _d2samples vs. _sample2d
-        for dr, samples in self._d2samples.items():
-            for s in samples:
-                assert dr in self._sample2d.get(s, set()), f"{dr} missing in _sample2d[{s}]"
-
-        for s, dr_set in self._sample2d.items():
-            for dr in dr_set:
-                assert s in self._d2samples.get(dr, set()), f"{s} missing in _d2samples[{dr}]"
-
-        # 3. _ref2d
+        This method is intended for debugging and testing purposes only.
+        It runs in O(N) time and should not be used in performance-critical paths.
+        """
+        # _ref2d vs. _ref2m vs. _ref2samples
         for ref, dr in self._ref2d.items():
-            assert ref == dr.ref, f"ref {repr(ref)} and dr.ref {(repr(dr.ref))} does not match"
-            assert dr in self._d2m, f"{dr} missing in _d2m"
-            assert dr in self._d2samples, f"{dr} missing in _d2samples"
+            assert ref == dr.ref, f"ref {ref!r} and dr.ref {dr.ref!r} does not match"
+            assert ref in self._ref2m, f"{dr!r} missing in _ref2m"
+            assert ref in self._ref2samples, f"{dr!r} missing in _ref2samples"
+        for ref in self._ref2m:
+            assert ref in self._ref2d, f"extra ref {ref!r} in _ref2m"
+        for ref in self._ref2samples:
+            assert ref in self._ref2d, f"extra ref {ref!r} in _ref2samples"
+
+        # _ref2m vs. _m2ref
+        for ref, mid in self._ref2m.items():
+            assert ref in self._m2ref.get(mid, set()), f"{ref!r} missing in _m2d[{mid!r}]"
+        for mid, ref_set in self._m2ref.items():
+            for ref in ref_set:
+                assert self._ref2m.get(ref) == mid, f"{ref!r} in _m2ref[{mid!r}] but not in _ref2m"
+
+        # _ref2samples vs. _sample2ref
+        for ref, samples in self._ref2samples.items():
+            for s in samples:
+                assert ref in self._sample2ref.get(s, set()), f"{ref!r} missing in _sample2d[{s!r}]"
+        for s, ref_set in self._sample2ref.items():
+            for ref in ref_set:
+                assert s in self._ref2samples.get(ref, set()), f"{s!r} missing in _ref2samples[{ref!r}]"
+
 
     def save(self, file: str | os.PathLike | t.IO[str],
              indent=2, ensure_ascii=False) -> None:
         """Save ResourceRepo to a JSON file."""
-        data = {
-            "resources": [
-                {"ref": dr.ref, "type": dr.type_} for dr in self._ref2d.values()
-            ],
-            "d2m": {dr.ref: mid.value for dr, mid in self._d2m.items()},
-            "d2samples": {dr.ref: list(samples) for dr, samples in self._d2samples.items()},
+        data: ResourceRepoData = {
+            "resources": [dr.model_dump() for dr in self._ref2d.values()],
+            "ref2m": {ref: mid.model_dump() for ref, mid in self._ref2m.items()},
+            "ref2samples": {ref: list(samples) for ref, samples in self._ref2samples.items()},
         }
         if isinstance(file, (str, os.PathLike)):
             with open(file, "w", encoding='utf-8') as f:
@@ -286,31 +231,49 @@ class ResourceRepo:
         """Load ResourceRepo from a JSON file."""
         if isinstance(file, (str, os.PathLike)):
             with open(file, encoding='utf-8') as f:
-                data = json.load(f)
+                data: ResourceRepoData = json.load(f)
         else:
             data = json.load(file)
 
         repo = ResourceRepo()
 
         # 1. resources
-        for dr_dict in data["resources"]:
-            ref = dr_dict["ref"]
-            type_ = dr_dict.get("type")
-            dr = DataResource(ref, type_)
-            repo._ref2d[ref] = dr
+        for dr_dump in data["resources"]:
+            dr = DataResource(**dr_dump)
+            repo._ref2d[dr.ref] = dr
 
-        # 2. d2m and m2d
-        for ref, mid_val in data["d2m"].items():
+        # 2. measurements
+        for ref, mid_dump in data["ref2m"].items():
             dr = repo._ref2d[ref]
-            mid = MeasurementID(mid_val)
-            repo._d2m[dr] = mid
-            repo._m2d.setdefault(mid, set()).add(dr)
+            mid = MeasurementID(**mid_dump)
+            repo._ref2m[dr.ref] = mid
+            repo._m2ref.setdefault(mid, set()).add(ref)
 
-        # 3. d2samples and sample2d
-        for ref, samples in data["d2samples"].items():
-            dr = repo._ref2d[ref]
-            repo._d2samples[dr] = set(samples)
+        # 3. samples
+        for ref, samples in data["ref2samples"].items():
+            repo._ref2samples.setdefault(ref, set()).update(samples)
             for s in samples:
-                repo._sample2d.setdefault(s, set()).add(dr)
+                repo._sample2ref.setdefault(s, set()).add(ref)
 
         return repo
+
+    def __len__(self) -> int:
+        """Number of registered resources."""
+        return len(self._ref2d)
+
+    def __contains__(self, resource: str | DataResource) -> bool:
+        ref = resource.ref if isinstance(resource, DataResource) else resource
+        return ref in self._ref2d
+
+    def stats(self) -> dict[str, int]:
+        """Return basic statistics of the repository."""
+        return {
+            "n_resources": len(self._ref2d),
+            "n_measurements": len(self._m2ref),
+            "n_samples": len(self._sample2ref),
+        }
+
+class ResourceRepoData(t.TypedDict):
+    resources: list[dict[str, t.Any]]
+    ref2m: dict[str, t.Any]
+    ref2samples: dict[str, list[str]]

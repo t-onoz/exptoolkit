@@ -7,5 +7,4 @@ This subpackage is independent of others.
 from exptoolkit.repository._repo import (
     DataResource,
     ResourceRepo,
-    Measurement,
 )
