@@ -11,4 +11,5 @@ from exptoolkit.repository._repo import (
 from exptoolkit.repository._scanner import(
     ScanResult,
     ResourceScanner,
+    DirectoryScanner,
 )
