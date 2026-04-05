@@ -212,19 +212,20 @@ class ResourceRepo:
                 assert s in self._ref2samples.get(ref, set()), f"{s!r} missing in _ref2samples[{ref!r}]"
 
 
-    def save(self, file: str | os.PathLike | t.IO[str],
-             indent=2, ensure_ascii=False) -> None:
+    def save(self, file: str | os.PathLike | t.IO[str], **json_kw) -> None:
         """Save ResourceRepo to a JSON file."""
         data: ResourceRepoData = {
             "resources": [dr.model_dump() for dr in self._ref2d.values()],
             "ref2m": {ref: mid.model_dump() for ref, mid in self._ref2m.items()},
             "ref2samples": {ref: list(samples) for ref, samples in self._ref2samples.items()},
         }
+        json_kw.setdefault("indent", 2)
+        json_kw.setdefault("ensure_ascii", False)
         if isinstance(file, (str, os.PathLike)):
             with open(file, "w", encoding='utf-8') as f:
-                json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii)
+                json.dump(data, f, **json_kw)
         else:
-            json.dump(data, file, indent=indent, ensure_ascii=ensure_ascii)
+            json.dump(data, file, **json_kw)
 
     @classmethod
     def load(cls, file: str | os.PathLike | t.IO[str]) -> ResourceRepo:
@@ -275,5 +276,5 @@ class ResourceRepo:
 
 class ResourceRepoData(t.TypedDict):
     resources: list[dict[str, t.Any]]
-    ref2m: dict[str, t.Any]
+    ref2m: dict[str, dict[str, t.Any]]
     ref2samples: dict[str, list[str]]
