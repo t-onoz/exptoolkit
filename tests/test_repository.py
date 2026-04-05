@@ -185,3 +185,11 @@ def test_by_sample_regex_invalid_pattern():
 
     with pytest.raises(re.error):
         repo.by_sample_regex(r"[")  # invalid regex
+
+def test_broken_repo():
+    repo = ResourceRepo()
+    repo.add("a.csv", measurement_id="m1", samples=["s1"])
+    repo.add("b.csv", measurement_id="m1", samples=["s2"])
+    del repo._ref2d["a.csv"]
+    with pytest.raises(AssertionError):
+        repo._check_indexes()
