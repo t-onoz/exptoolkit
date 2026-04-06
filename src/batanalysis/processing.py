@@ -114,40 +114,56 @@ def differentiate(
 
 def _differentiate_step(g: pl.DataFrame, window_in_volt, polyorder) -> pl.DataFrame:
     cls = ChargeDischargeData
-    if len(g) <= 1 or  not g[cls.state.name].is_in(['charge', 'discharge']).all():
+
+    def _none():
         return g.with_columns(
-            pl.lit(float('nan'), dtype=cls.dqdv.dtype).alias(cls.dqdv.name),
-            pl.lit(float('nan'), dtype=cls.dvdq.dtype).alias(cls.dvdq.name),
+            pl.lit(None, dtype=cls.dqdv.dtype).alias(cls.dqdv.name),
+            pl.lit(None, dtype=cls.dvdq.dtype).alias(cls.dvdq.name),
         )
+
+    if not g[cls.state.name].is_in(['charge', 'discharge']).all():
+        return _none()
 
     q = g[cls.step_capacity.name].to_numpy()
     v = g[cls.voltage.name].to_numpy()
+    dqdv_full = np.full_like(v, np.nan)
+    dvdq_full = np.full_like(v, np.nan)
 
     # exclude constant voltage region
     mask = np.abs(v - v[-1]) >= 0.005
     v_ = v[mask]
     q_ = q[mask]
 
-    # window幅の決定
-    v_span = np.nanmax(v_) - np.nanmin(v_) + 1e-10
+    cycle = g[cls.cycle.name].first()
+    step = g[cls.step.name].first()
+
+    # set window length based on voltage range and number of data points
+    v_span = np.nanmax(v_) - np.nanmin(v_)
+
+    if window_in_volt >= v_span:
+        logger.warning('Skipping (cycle, step) = (%s, %s) because voltage span is too small (%s).',
+                       cycle, step, v_span)
+        return _none()
+
     wl = int(len(v_) * window_in_volt / v_span)
     if wl % 2 == 0:
-        wl = wl + 1
+        wl = wl - 1
 
-    if wl <= polyorder or wl >= len(v_) or np.isnan(wl):
-        logger.info('Too few data points. Using np.gradient instead of savgol_filter()')
-        dq = np.gradient(q_)
-        dv = np.gradient(v_)
-    else:
-        logger.info('Auto determined window_length: %s', wl)
-        dq = savgol_filter(q_, window_length=wl, polyorder=polyorder, deriv=1)
-        dv = savgol_filter(v_, window_length=wl, polyorder=polyorder, deriv=1)
-    dqdv = np.append(dq / dv, np.full(len(v)-len(v_), np.nan))
-    dvdq = np.append(dv / dq, np.full(len(v)-len(v_), np.nan))
+    if wl <= polyorder:
+        logger.warning('Skipping (cycle, step) = (%s, %s) because window_length is too small (%s)',
+                       cycle, step, wl)
+        return _none()
+
+    logger.info('window_length of (cycle, step) = (%s, %s): %s',
+                cycle, step, wl)
+    dq = savgol_filter(q_, window_length=wl, polyorder=polyorder, deriv=1)
+    dv = savgol_filter(v_, window_length=wl, polyorder=polyorder, deriv=1)
+    dqdv_full[mask] = dq / dv
+    dvdq_full[mask] = dv / dq
 
     return g.with_columns(
-        pl.Series(cls.dqdv.name, dqdv, dtype=cls.dqdv.dtype),
-        pl.Series(cls.dvdq.name, dvdq, dtype=cls.dvdq.dtype)
+        pl.Series(cls.dqdv.name, dqdv_full, dtype=cls.dqdv.dtype).fill_nan(None),
+        pl.Series(cls.dvdq.name, dvdq_full, dtype=cls.dvdq.dtype).fill_nan(None),
     )
 
 def chargedischarge_to_cycle(
