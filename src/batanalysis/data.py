@@ -34,13 +34,16 @@ class ChargeDischargeData(BaseData):
 
 class CycleSummaryData(BaseData):
     cycle = Column(pl.UInt16, 'dimensionless', Role.INTENSIVE)
-    state = Column(pl.Enum(['charge', 'discharge']), 'dimensionless', Role.INTENSIVE)
-    capacity = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
-    capacity_retention = Column(pl.Float32, 'dimensionless', Role.INTENSIVE)
-    coulomb_efficiency = Column(pl.Float32, 'dimensionless', Role.INTENSIVE)
-    energy = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
-    energy_efficiency = Column(pl.Float32, 'dimensionless', Role.INTENSIVE)
-    energy_retention = Column(pl.Float32, 'dimensionless', Role.INTENSIVE)
+    capacity_charge = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
+    capacity_charge_retention = Column(pl.Float32, 'percent', Role.INTENSIVE)
+    capacity_discharge = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
+    capacity_discharge_retention = Column(pl.Float32, 'percent', Role.INTENSIVE)
+    coulomb_efficiency = Column(pl.Float32, 'percent', Role.INTENSIVE)
+    energy_charge = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
+    energy_charge_retention = Column(pl.Float32, 'dimensionless', Role.INTENSIVE)
+    energy_discharge = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
+    energy_discharge_retention = Column(pl.Float32, 'percent', Role.INTENSIVE)
+    energy_efficiency = Column(pl.Float32, 'percent', Role.INTENSIVE)
 
 
 class EISData(BaseData):

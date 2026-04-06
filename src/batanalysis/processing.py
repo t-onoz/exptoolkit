@@ -184,17 +184,10 @@ def chargedischarge_to_cycle(
     cdd = ChargeDischargeData
     csd = CycleSummaryData
 
-    base_cap = (
-        csd.capacity.expr.first()
-        if base == "first"
-        else csd.capacity.expr.max()
-    )
-
-    base_energy = (
-        csd.energy.expr.first()
-        if base == "first"
-        else csd.energy.expr.max()
-    )
+    def _ret(expr: pl.Expr) -> pl.Expr:
+        if base == 'first':
+            return expr / expr.first(ignore_nulls=True)
+        return expr / expr.max()
 
     new_table = (
         data.table
@@ -208,7 +201,7 @@ def chargedischarge_to_cycle(
         #    step_capacity / step_energy は通常累積値なので
         #    stepごとの最終行を取ることで step全体の値を得る
         # ------------------------------------------------------------
-        .group_by(cdd.step.expr, maintain_order=True)
+        .group_by(cdd.cycle.expr, cdd.step.expr, maintain_order=True)
         .last()
 
         # ------------------------------------------------------------
@@ -216,44 +209,20 @@ def chargedischarge_to_cycle(
         #    1 cycle 内の charge / discharge の
         #    capacity と energy をそれぞれ合計
         # ------------------------------------------------------------
-        .group_by([cdd.cycle.expr, cdd.state.expr], maintain_order=True)
+        .group_by(cdd.cycle.expr, cdd.state.expr, maintain_order=True)
         .agg(
-            cdd.step_capacity.expr.sum().alias(csd.capacity.name),
-            cdd.step_energy.expr.sum().alias(csd.energy.name),
+            cdd.step_capacity.expr.sum().alias('capacity'),
+            cdd.step_energy.expr.sum().alias('energy'),
         )
-
         # ------------------------------------------------------------
         # cycle内の charge / discharge の値を横持ち列として取得
-        #
-        #    q_ch  : cycle中の充電容量
-        #    q_dis : cycle中の放電容量
-        #    e_ch  : cycle中の充電エネルギー
-        #    e_dis : cycle中の放電エネルギー
-        #
-        #    filter + max + over('cycle') を使い
-        #    cycle内の特定 state の値を各行にコピーする
         # ------------------------------------------------------------
-        .with_columns(
-            pl.when(cdd.state.expr == State.CHARGE)
-                .then(csd.capacity.expr)
-                .alias("q_ch"),
-            pl.when(cdd.state.expr == State.DISCHARGE)
-                .then(csd.capacity.expr)
-                .alias("q_dis"),
-            pl.when(cdd.state.expr == State.CHARGE)
-                .then(csd.energy.expr)
-                .alias("e_ch"),
-            pl.when(cdd.state.expr == State.DISCHARGE)
-                .then(csd.energy.expr)
-                .alias("e_dis"),
+        .pivot(
+            on = cdd.state.name,
+            on_columns= [State.CHARGE, State.DISCHARGE],
+            index = cdd.cycle.name,
+            values = ['capacity', 'energy']
         )
-        .with_columns(
-            pl.col("q_ch").max().over("cycle"),
-            pl.col("q_dis").max().over("cycle"),
-            pl.col("e_ch").max().over("cycle"),
-            pl.col("e_dis").max().over("cycle"),
-        )
-
         # --------------------------------------------------------
         # 容量保持率 (retention)
         #
@@ -262,10 +231,10 @@ def chargedischarge_to_cycle(
         #    それに対する比をとる
         # --------------------------------------------------------
         .with_columns(
-            (csd.capacity.expr / base_cap.over(csd.state.expr))
-                .alias(csd.capacity_retention.name),
-            (csd.energy.expr / base_energy.over(csd.state.expr))
-                .alias(csd.energy_retention.name),
+            (100.0 * _ret(csd.capacity_charge.expr)).alias(csd.capacity_charge_retention.name),
+            (100.0 * _ret(csd.capacity_discharge.expr)).alias(csd.capacity_discharge_retention.name),
+            (100.0 * _ret(csd.energy_charge.expr)).alias(csd.energy_charge_retention.name),
+            (100.0 * _ret(csd.energy_discharge.expr)).alias(csd.energy_discharge_retention.name),
         )
 
         # ------------------------------------------------------------
@@ -275,10 +244,9 @@ def chargedischarge_to_cycle(
         #    energy efficiency   = discharge energy   / charge energy
         # ------------------------------------------------------------
         .with_columns(
-            (pl.col("q_dis") / pl.col("q_ch"))
+            (100.0 * (csd.capacity_discharge.expr / csd.capacity_charge.expr))
                 .alias(csd.coulomb_efficiency.name),
-
-            (pl.col("e_dis") / pl.col("e_ch"))
+            (100.0 * (csd.energy_discharge.expr / csd.energy_charge.expr))
                 .alias(csd.energy_efficiency.name),
         )
     )

@@ -140,17 +140,14 @@ def plot_cycle(
     **kw,
 ):
     target = get_target(target_like)
-    data = data.filter(state=state)
     x = data.cycle
-    col_y = f'{value}_retention' if mode == 'retention' else value
-    unit = 'percent' if mode == 'retention' else None
-    y = data.col_to_unit(col_y, unit)
+    col_y = f'{value}_{state}_retention' if mode == 'retention' else f'{value}_{state}'
+    y = data.table[col_y]
     target.add_line(x, y, label=label, **kw)
     if add_ax_labels:
         target.set_ax_label('x', 'Cycle Number')
-        ylabel = capwords(state) + ' '
-        ylabel += capwords(col_y.replace('_', ' '))
-        ylabel += f' ({"%" if mode == "retention" else data.get_unit(col_y)})'
+        yunit = data.get_unit(col_y)
+        ylabel = f'{capwords(state)} {capwords(value)} ({yunit})'
         target.set_ax_label('y', ylabel)
 
 if TYPE_CHECKING:
