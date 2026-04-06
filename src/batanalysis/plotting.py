@@ -80,7 +80,7 @@ def plot_colecole(
     cls = EISData
     x = data.re_Z
     y = data.im_Z
-    target.add_scatter(x, y, label=label, **kw)
+    target.add_line(x, y, label=label, **kw)
     target.reverse_axis(y=True)
     if add_ax_labels:
         target.set_ax_label("x", f"Re[Z] ({data.get_unit(cls.re_Z.name)})")
