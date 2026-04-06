@@ -11,26 +11,26 @@ class State:
 
 class ChargeDischargeData(BaseData):
     time = Column(pl.Float64, 's', Role.INTENSIVE)
-    temperature = Column(pl.Float32, 'degC', Role.INTENSIVE)
-    voltage = Column(pl.Float32, 'V', Role.INTENSIVE)
-    current = Column(pl.Float32, 'mA', Role.EXTENSIVE)
-    capacity = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
-    energy = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
-    dqdv = Column(pl.Float32, 'mAh/V', Role.EXTENSIVE)
-    dvdq = Column(pl.Float32, 'V/mAh', Role.EXTENSIVE)
+    cycle = Column(pl.UInt16, 'dimensionless', Role.INTENSIVE)
+    step = Column(pl.UInt32, 'dimensionless', Role.INTENSIVE)
     state = Column(
         pl.Enum(['charge', 'discharge', 'rest', 'unknown']),
         'dimensionless',
         Role.INTENSIVE
     )
-    cycle = Column(pl.UInt16, 'dimensionless', Role.INTENSIVE)
+    temperature = Column(pl.Float32, 'degC', Role.INTENSIVE)
+    current = Column(pl.Float32, 'mA', Role.EXTENSIVE)
+    capacity = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
+    energy = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
     cycle_time = Column(pl.Float64, 's', Role.INTENSIVE)
     cycle_capacity = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
     cycle_energy = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
-    step = Column(pl.UInt32, 'dimensionless', Role.INTENSIVE)
     step_time = Column(pl.Float64, 's', Role.INTENSIVE)
     step_capacity = Column(pl.Float32, 'mAh', Role.EXTENSIVE)
     step_energy = Column(pl.Float32, 'mWh', Role.EXTENSIVE)
+    voltage = Column(pl.Float32, 'V', Role.INTENSIVE)
+    dqdv = Column(pl.Float32, 'mAh/V', Role.EXTENSIVE)
+    dvdq = Column(pl.Float32, 'V/mAh', Role.EXTENSIVE)
 
 class CycleSummaryData(BaseData):
     cycle = Column(pl.UInt16, 'dimensionless', Role.INTENSIVE)
