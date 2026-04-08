@@ -1,15 +1,19 @@
 from __future__ import annotations
 from itertools import zip_longest
 from logging import getLogger
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 import numpy as np
-from numpy.typing import ArrayLike
 try:
     from openpyxl.worksheet.worksheet import Worksheet
     from openpyxl.chart import ScatterChart, Reference, Series
 except ImportError as exc:
     raise ImportError("openpyxl is not installed. ") from exc
 from exptoolkit.plotter.backends._base import Target
+from exptoolkit.plotter.colors import parse_color
+
+if TYPE_CHECKING:
+    # import Series object directly since openpyxl.chart.Series does not work
+    from openpyxl.chart.series import Series as _Series
 
 logger = getLogger(__name__)
 
@@ -35,8 +39,7 @@ class OpenPyXlTarget(Target):
         if chart is None:
             self.ws.add_chart(self.chart, addr_default)
 
-    def add_line(self, x: ArrayLike, y: ArrayLike, color: str | None = None,
-                 label: str | None = None, **kwargs: Any) -> None:
+    def add_line(self, x, y, color=None, label=None, **kwargs):
         max_col = self.ws.max_column
         prefix = label + "_" if label else ""
         self.ws.cell(row=1, column=max_col + 1).value = prefix + getattr(x, "name", "x")
@@ -48,30 +51,38 @@ class OpenPyXlTarget(Target):
             self.ws.cell(row=i + 2, column=max_col + 2).value = y_val
         x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=1 + len(x_np))
         y_ref = Reference(self.ws, min_col=max_col + 2, min_row=2, max_row=1 + len(y_np))
-        series = Series(y_ref, x_ref, title=label)
+        series: _Series = Series(y_ref, x_ref, title=label)
+        if color is not None:
+            c = parse_color(color).as_hex()[1:]
+            series.graphicalProperties.line.solidFill = c
         self.chart.series.append(series)
+        return series
 
-    def add_scatter(self, x: ArrayLike, y: ArrayLike, c: ArrayLike | None = None,
-                    label: str | None = None, color_scale: str = "linear",
-                    **kwargs: Any) -> None:
+    def add_scatter(self, x, y, c=None, color=None, label=None, color_scale="linear", **kwargs):
         if c is not None:
             logger.warning("Color mapping for scatter plots is not supported in Openpyxl backend."
                 " Ignoring color information.")
         max_col = self.ws.max_column
-        x = np.asarray(x)
-        y = np.asarray(y)
         prefix = label + "_" if label else ""
         self.ws.cell(row=1, column=max_col + 1).value = prefix + getattr(x, "name", "x")
         self.ws.cell(row=1, column=max_col + 2).value = prefix + getattr(y, "name", "y")
+        x = np.asarray(x)
+        y = np.asarray(y)
         for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=np.nan)):
             self.ws.cell(row=i + 2, column=max_col + 1).value = x_val
             self.ws.cell(row=i + 2, column=max_col + 2).value = y_val
         x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=1 + len(x))
         y_ref = Reference(self.ws, min_col=max_col + 2, min_row=2, max_row=1 + len(y))
-        series = Series(y_ref, xvalues=x_ref, title=label)
+        series: _Series = Series(y_ref, xvalues=x_ref, title=label)
         series.graphicalProperties.line.noFill = True
-        series.marker.symbol = "circle"
+        series.marker.symbol = 'circle'
+        if color is not None:
+            color_obj = parse_color(color)
+            series.marker.spPr.solidFill = color_obj.as_hex()[1:]
+            series.marker.spPr.ln.solidFill = color_obj.as_hex()[1:]
         self.chart.series.append(series)
+
+        return series
 
     def set_ax_label(self, axis: Literal["x", "y"], label: str) -> None:
         if axis == "x":

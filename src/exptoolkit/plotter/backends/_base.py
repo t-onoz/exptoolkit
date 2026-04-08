@@ -1,39 +1,48 @@
 from __future__ import annotations
-from typing import Protocol, Any, Literal, runtime_checkable, TYPE_CHECKING
+import typing as t
+import numpy as np
+import numpy.typing as npt
+import polars as pl
+from exptoolkit.plotter.colors import ColorLike
 
-if TYPE_CHECKING:
-    from numpy.typing import ArrayLike
+if t.TYPE_CHECKING:
+    # pandas is not in requiements, just use for type checking
+    import pandas as pd
 
-@runtime_checkable
-class Target(Protocol):
+VectorLike = t.Union[npt.NDArray[np.floating | np.integer], pl.Series, t.Sequence[float | int], "pd.Series"]
+
+
+@t.runtime_checkable
+class Target(t.Protocol):
     """Protocol for plotting graphs, absorbing differences in backends.
     The methods implement specific plotting commands."""
 
     def add_line(self,
-                 x: ArrayLike,
-                 y: ArrayLike,
-                 color: Any = None,
+                 x: VectorLike,
+                 y: VectorLike,
+                 color: ColorLike | None = None,
                  label: str | None = None,
-                 **kwargs) -> Any: ...
+                 **kwargs: t.Any) -> t.Any: ...
     def add_scatter(self,
-                    x: ArrayLike,
-                    y: ArrayLike,
-                    c: ArrayLike | None = None,
+                    x: VectorLike,
+                    y: VectorLike,
+                    c: VectorLike | None = None,
+                    color: ColorLike | None = None,
                     label: str | None = None,
-                    color_scale: Literal["log", "linear"] = "linear",
-                    **kwargs) -> Any: ...
+                    color_scale: t.Literal["log", "linear"] = "linear",
+                    **kwargs: t.Any) -> t.Any: ...
     def set_ax_label(self,
-                     axis: Literal["x", "y"],
-                     label: str) -> Any: ...
+                     axis: t.Literal["x", "y"],
+                     label: str) -> t.Any: ...
     def set_scale(self,
-                  axis: Literal["x", "y"],
-                  scale: Literal["linear", "log"]) -> Any: ...
+                  axis: t.Literal["x", "y"],
+                  scale: t.Literal["linear", "log"]) -> t.Any: ...
     def set_title(self,
-                  title: str) -> Any: ...
+                  title: str) -> t.Any: ...
     def set_aspect(self,
-                   aspect: Literal["equal", "auto"]) -> Any: ...
+                   aspect: t.Literal["equal", "auto"]) -> t.Any: ...
     def reverse_axis(self,
                      x: bool | None = None,
-                     y: bool | None = None) -> Any: ...
+                     y: bool | None = None) -> t.Any: ...
     @classmethod
-    def from_obj(cls, obj: Any) -> Target: ...
+    def from_obj(cls, obj: t.Any) -> Target: ...

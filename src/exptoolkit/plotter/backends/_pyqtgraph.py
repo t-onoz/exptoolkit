@@ -1,6 +1,7 @@
 from __future__ import annotations
 import numpy as np
 from exptoolkit.plotter.backends._base import Target
+from exptoolkit.plotter.colors import parse_color
 
 try:
     import pyqtgraph as pg
@@ -19,22 +20,12 @@ class PyQtGraphTarget(Target):
         self.target = target
 
     def add_line(self, x, y, color=None, label=None, **kwargs):
-        if isinstance(color, str) and color not in ('b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'):
-            # Convert color to RGBA tuple if it's a color name or hex string supported by matplotlib
-            try:
-                # pylint: disable-next=import-outside-toplevel
-                from matplotlib.colors import to_rgba
-                color = tuple(int(x*255) for x in to_rgba(color))
-            except ImportError:
-                # pylint: disable-next=raise-missing-from
-                raise ValueError(f"Invalid color: {color}. Please provide a valid "
-                                 "color name or hex string, "
-                                 "or install matplotlib for more color options.")
         if color is not None:
-            kwargs['pen'] = color
+            cobj = parse_color(color)
+            kwargs['pen'] = cobj.as_rgb_int(include_alpha=True)
         return self.target.plot(x, y, name=label, **kwargs)
 
-    def add_scatter(self, x, y, c=None, label=None, color_scale="linear", **kwargs):
+    def add_scatter(self, x, y, c=None, color=None, label=None, color_scale="linear", **kwargs):
         kwargs['pen'] = None
         kwargs['symbol'] = 'o'
         if c is not None:
@@ -52,6 +43,8 @@ class PyQtGraphTarget(Target):
             colors = colormap.getLookupTable(0,  1, n_pts)
             brushes = colors[np.searchsorted(value_range, c)]
             kwargs['symbolBrush'] = brushes
+        elif color is not None:
+            kwargs['symbolBrush'] = parse_color(color).as_rgb_int(include_alpha=True)
         return self.target.plot(x, y, name=label, **kwargs)
 
     def set_ax_label(self, axis, label):

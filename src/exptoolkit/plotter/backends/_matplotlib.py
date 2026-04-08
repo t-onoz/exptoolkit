@@ -1,5 +1,6 @@
 from __future__ import annotations
 from exptoolkit.plotter.backends._base import Target
+from exptoolkit.plotter.colors import parse_color
 
 try:
     from matplotlib.axes import Axes
@@ -18,16 +19,19 @@ class MatplotlibTarget(Target):
 
     def add_line(self, x, y, color=None, label=None, **kwargs):
         if 'fmt' in kwargs:
-            args = (x, y, kwargs.pop('fmt'))
+            args: tuple = (x, y, kwargs.pop('fmt'))
         else:
             args = (x, y)
         if color:
-            kwargs["color"] = color
+            color_ = parse_color(color)
+            kwargs["color"] = color_.as_hex(include_alpha=True)
         return self.ax.plot(*args, label=label, **kwargs)
 
-    def add_scatter(self, x, y, c=None, label=None, color_scale="linear", **kwargs):
+    def add_scatter(self, x, y, c=None, color=None, label=None, color_scale="linear", **kwargs):
         if color_scale == 'log':
             kwargs['norm'] = 'log'
+        if color is not None:
+            kwargs['color'] = parse_color(color).as_hex(include_alpha=True)
         return self.ax.scatter(x, y, c=c, label=label, **kwargs)
 
     def set_ax_label(self, axis, label):
