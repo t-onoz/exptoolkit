@@ -26,7 +26,7 @@ class ChargeDischarge(Plotter[ChargeDischargeData]):
             data = data.filter(cls.cycle.expr.is_in(self.cycle))
 
         if self.mode == 'step':
-            x_expr = (pl.when(cls.state.expr.is_in([State.CHARGE, State.DISCHARGE]))
+            x_expr: pl.Expr = (pl.when(cls.state.expr.is_in([State.CHARGE, State.DISCHARGE]))
                 .then(cls.step_capacity.expr)
             )
         elif self.mode == 'cycle':
