@@ -18,11 +18,9 @@ class DataResource(BaseModel):
     ref: str
     type_: str | None = Field(default=None)
 
-MID = t.Union[int, float, str]
-
 class MeasurementID(BaseModel):
     model_config = ConfigDict(frozen=True)
-    value: MID  # float as id is accepted, though not recommended
+    value: str
 
 class ResourceRepo:
     """
@@ -50,7 +48,7 @@ class ResourceRepo:
         self._ref2samples: dict[str, set[str]] = {}
 
     def add(self, ref: str, *,
-            measurement_id: MID | MeasurementID,
+            measurement_id: str | MeasurementID,
             samples: str | t.Iterable[str],
             data_type: str | None = None
             ) -> DataResource:
@@ -148,11 +146,11 @@ class ResourceRepo:
                 for s, ref_set in self._sample2ref.items()
                 if ptn.search(s)}
 
-    def by_measurement(self, id_: MID) -> list[DataResource]:
+    def by_measurement(self, id_: str) -> list[DataResource]:
         """Return data sources belonging to a measurement."""
         return [self._ref2d[ref] for ref in self._m2ref.get(MeasurementID(value=id_), set())]
 
-    def samples_by_measurement(self, id_: MID) -> list[str]:
+    def samples_by_measurement(self, id_: str) -> list[str]:
         """Return unique sample names associated with a measurement."""
         refs = self._m2ref.get(MeasurementID(value=id_), set())
         return list({

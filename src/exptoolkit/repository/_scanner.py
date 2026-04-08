@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from pathlib import Path
 from logging import getLogger
 from pydantic import BaseModel, ConfigDict
-from exptoolkit.repository._repo import ResourceRepo, MID
+from exptoolkit.repository._repo import ResourceRepo
 
 logger = getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = getLogger(__name__)
 class ScanResult(BaseModel):
     model_config = ConfigDict(frozen=True)
     ref: str
-    measurement_id: MID
+    measurement_id: str
     samples: str | tuple[str, ...]
     data_type: str | None = None
 
