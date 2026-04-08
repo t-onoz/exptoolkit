@@ -38,6 +38,9 @@ class OpenPyXlTarget(Target):
         self.chart = chart or ScatterChart()
         if chart is None:
             self.ws.add_chart(self.chart, addr_default)
+            self.chart.x_axis.delete = False
+            self.chart.y_axis.delete = False
+            self.chart.varyColors = False
 
     def add_line(self, x, y, color=None, label=None, **kwargs):
         max_col = self.ws.max_column
