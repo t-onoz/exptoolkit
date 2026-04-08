@@ -1,9 +1,11 @@
 # pylint: disable=W
 import pytest
 import re
+from tempfile import NamedTemporaryFile
+import polars as pl
 from exptoolkit.repository import ResourceRepo  # type: ignore[import]
 from exptoolkit.repository._repo import MeasurementID  # type: ignore[import]
-from tempfile import NamedTemporaryFile
+
 
 def test_add_and_lookup():
     repo = ResourceRepo()
@@ -193,3 +195,36 @@ def test_broken_repo():
     del repo._ref2d["a.csv"]
     with pytest.raises(AssertionError):
         repo._check_indexes()
+
+
+def test_to_df_basic():
+    repo = ResourceRepo()
+
+    repo.add(
+        ref="file1",
+        measurement_id="m001",
+        samples=["A", "B"],
+        data_type="raw"
+    )
+
+    df = repo.to_polars()
+
+    expected = pl.DataFrame([
+        {"ref": "file1", "measurement_id": "m001", "data_type": "raw", "sample": "A"},
+        {"ref": "file1", "measurement_id": "m001", "data_type": "raw", "sample": "B"},
+    ])
+
+    assert df.sort(df.columns).equals(
+        expected.sort(expected.columns)
+    )
+
+def test_to_df_multiple_refs():
+    repo = ResourceRepo()
+
+    repo.add(ref="f1", measurement_id="m001", samples=["A", "B"])
+    repo.add(ref="f2", measurement_id="m002", samples=["C"])
+
+    df = repo.to_polars()
+    assert set(df["ref"]) == {"f1", "f2"}
+    assert df.shape[0] == 3
+

@@ -264,13 +264,38 @@ class ResourceRepo:
         ref = resource.ref if isinstance(resource, DataResource) else resource
         return ref in self._ref2d
 
-    def stats(self) -> dict[str, int]:
-        """Return basic statistics of the repository."""
-        return {
-            "n_resources": len(self._ref2d),
-            "n_measurements": len(self._m2ref),
-            "n_samples": len(self._sample2ref),
-        }
+    def _iter_rows(self):
+        for ref, dr in self._ref2d.items():
+            for s in sorted(self._ref2samples[ref]):
+                yield {
+                    "ref": ref,
+                    "measurement_id": self._ref2m[ref].value,
+                    "data_type": dr.type_,
+                    "sample": s,
+                }
+
+    def to_polars(self):
+        import polars as pl
+        return pl.DataFrame(
+            self._iter_rows(),
+            schema=[
+                ("ref", pl.String),
+                ("measurement_id", pl.String),
+                ("data_type", pl.String),
+                ("sample", pl.String),
+            ],
+        )
+
+    def to_pandas(self):
+        import pandas as pd
+        df = pd.DataFrame(self._iter_rows())
+        df = df.astype({
+            "ref": "string",
+            "measurement_id": "string",
+            "data_type": "string",
+            "sample": "string",
+        })
+        return df
 
 class ResourceRepoData(t.TypedDict):
     resources: list[dict[str, t.Any]]
