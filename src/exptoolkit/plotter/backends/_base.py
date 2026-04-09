@@ -1,15 +1,15 @@
 from __future__ import annotations
 import typing as t
-import numpy as np
-import numpy.typing as npt
-import polars as pl
 from exptoolkit.plotter.colors import ColorLike
 
 if t.TYPE_CHECKING:
-    # pandas is not in requiements, just use for type checking
+    # these are just for type annotation
+    import numpy as np
+    import numpy.typing as npt
     import pandas as pd
+    import polars as pl
 
-VectorLike = t.Union[npt.NDArray[np.floating | np.integer], pl.Series, t.Sequence[float | int], "pd.Series"]
+VectorLike: t.TypeAlias = "t.Sequence[int | float] | npt.NDArray[np.number] | pd.Series | pl.Series"
 
 
 @t.runtime_checkable
