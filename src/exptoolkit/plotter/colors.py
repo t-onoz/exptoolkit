@@ -55,7 +55,7 @@ def parse_color(color: ColorLike) -> Color:
       - CSS color names ("red")
       - Hex strings (#rgb, #rgba, #rrggbb, #rrggbbaa)
       - tuple of 0-1 float (r, g, b) / (r, g, b, a)
-      - "C{n}" (Matplotlib cycle)
+      - "C{n}" (Matplotlib cycle, requires matplotlib)
 
     Conversions use webcolors.
     """
@@ -102,4 +102,3 @@ def parse_color(color: ColorLike) -> Color:
         return Color(r / 255, g / 255, b / 255)
 
     raise TypeError(f'Unknown input type: {repr(type(color))}')
-
