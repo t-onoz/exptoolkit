@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-
 class OpenPyXlTarget(Target):
     """OpenPyXlTarget backend for plotting graphs. Implements the Target protocol."""
     def __init__(
@@ -45,20 +44,20 @@ class OpenPyXlTarget(Target):
     def add_line(self, x, y, color=None, label=None, **kwargs):
         max_col = self.ws.max_column
         prefix = label + "_" if label else ""
-        self.ws.cell(row=1, column=max_col + 1).value = prefix + getattr(x, "name", "x")
-        self.ws.cell(row=1, column=max_col + 2).value = prefix + getattr(y, "name", "y")
-        x_np = np.asarray(x)
-        y_np = np.asarray(y)
-        for i, (x_val, y_val) in enumerate(zip_longest(x_np, y_np, fillvalue=np.nan)):
-            self.ws.cell(row=i + 2, column=max_col + 1).value = x_val
-            self.ws.cell(row=i + 2, column=max_col + 2).value = y_val
-        x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=1 + len(x_np))
-        y_ref = Reference(self.ws, min_col=max_col + 2, min_row=2, max_row=1 + len(y_np))
+        self.ws.cell(row=1, column=max_col + 1, value = prefix + str(getattr(x, "name", "x")))
+        self.ws.cell(row=1, column=max_col + 2, value = prefix + str(getattr(y, "name", "y")))
+        for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=np.nan)):
+            self.ws.cell(row=i + 2, column=max_col + 1, value = x_val)
+            self.ws.cell(row=i + 2, column=max_col + 2, value = y_val)
+        x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=len(x)+1)
+        y_ref = Reference(self.ws, min_col=max_col + 2, min_row=2, max_row=len(x)+1)
         series: _Series = Series(y_ref, x_ref, title=label)
         if color is not None:
             c = parse_color(color).as_hex()[1:]
             series.graphicalProperties.line.solidFill = c
         self.chart.series.append(series)
+        if self.chart.legend.overlay is None:
+            self.chart.legend.overlay = False
         return series
 
     def add_scatter(self, x, y, c=None, color=None, label=None, color_scale="linear", **kwargs):
@@ -67,31 +66,35 @@ class OpenPyXlTarget(Target):
                 " Ignoring color information.")
         max_col = self.ws.max_column
         prefix = label + "_" if label else ""
-        self.ws.cell(row=1, column=max_col + 1).value = prefix + getattr(x, "name", "x")
-        self.ws.cell(row=1, column=max_col + 2).value = prefix + getattr(y, "name", "y")
-        x = np.asarray(x)
-        y = np.asarray(y)
+        self.ws.cell(row=1, column=max_col + 1, value=prefix + str(getattr(x, "name", "x")))
+        self.ws.cell(row=1, column=max_col + 2, value=prefix + str(getattr(y, "name", "y")))
         for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=np.nan)):
-            self.ws.cell(row=i + 2, column=max_col + 1).value = x_val
-            self.ws.cell(row=i + 2, column=max_col + 2).value = y_val
+            self.ws.cell(row=i + 2, column=max_col + 1, value=x_val)
+            self.ws.cell(row=i + 2, column=max_col + 2, value=y_val)
         x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=1 + len(x))
         y_ref = Reference(self.ws, min_col=max_col + 2, min_row=2, max_row=1 + len(y))
         series: _Series = Series(y_ref, xvalues=x_ref, title=label)
         series.graphicalProperties.line.noFill = True
-        series.marker.symbol = 'circle'
+        series.marker.symbol = kwargs.get('marker', 'circle')
         if color is not None:
             color_obj = parse_color(color)
             series.marker.spPr.solidFill = color_obj.as_hex()[1:]
             series.marker.spPr.ln.solidFill = color_obj.as_hex()[1:]
         self.chart.series.append(series)
+        if self.chart.legend.overlay is None:
+            self.chart.legend.overlay = False
 
         return series
 
     def set_ax_label(self, axis: Literal["x", "y"], label: str) -> None:
         if axis == "x":
             self.chart.x_axis.title = label
+            if self.chart.x_axis.title.overlay is None:
+                self.chart.x_axis.title.overlay = False
         elif axis == "y":
             self.chart.y_axis.title = label
+            if self.chart.y_axis.title.overlay is None:
+                self.chart.y_axis.title.overlay = False
         else:
             raise ValueError(f"Invalid axis: {axis}. Axis must be 'x' or 'y'.")
 
@@ -105,6 +108,8 @@ class OpenPyXlTarget(Target):
 
     def set_title(self, title: str) -> None:
         self.chart.title = title
+        if self.chart.title.overlay is None:
+            self.chart.title.overlay = False
 
     def set_aspect(self, aspect: Literal["equal", "auto"]) -> None:
         logger.warning("Setting aspect ratio is not supported in Openpyxl backend. Skipping.")
