@@ -1,7 +1,7 @@
 from __future__ import annotations
 from itertools import zip_longest
 from logging import getLogger
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING
 import numpy as np
 try:
     from openpyxl.worksheet.worksheet import Worksheet
@@ -121,7 +121,7 @@ class OpenPyXlTarget(Target):
             self.chart.y_axis.scaling.orientation = 'maxMin' if y else 'minMax'
 
     @classmethod
-    def from_obj(cls, obj: Any):
+    def from_obj(cls, obj):
         """Create an OpenpyxlTarget from an openpyxl Worksheet or Chart object."""
         if isinstance(obj, OpenPyXlTarget):
             return obj
@@ -129,14 +129,10 @@ class OpenPyXlTarget(Target):
             return cls(ws=obj)
         if isinstance(obj, tuple) and len(obj) == 2:
             ws, chart = obj
-            if not isinstance(ws, Worksheet):
-                raise TypeError("First element of the tuple must be an openpyxl Worksheet.")
-            if not isinstance(chart, ScatterChart):
-                raise TypeError("Second element of the tuple must be "
-                                "an openpyxl ScatterChart.")
-            return cls(ws=ws, chart=chart)
+            if isinstance(ws, Worksheet) and isinstance(chart, (ScatterChart, type(None))):
+                return cls(ws=ws, chart=chart)
         raise TypeError(
             "Unrecognized object type for OpenPyXlTarget. "
-            f"Expected (Worksheet, ScatterChart) tuple or Worksheet. "
-            f"Got: {type(obj).__name__}"
+            f"Expected tuple[Worksheet, ScatterChart | None] or Worksheet. "
+            f"Got: {repr(obj)}"
             )
