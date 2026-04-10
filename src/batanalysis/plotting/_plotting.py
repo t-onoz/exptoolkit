@@ -13,7 +13,7 @@ class ChargeDischarge(Plotter[ChargeDischargeData]):
     mode: t.Literal['step', 'cycle', 'total'] = 'step'
     add_ax_labels: bool = True
 
-    def _plot(self, data, target, label=None, **opts):
+    def _plot(self, data, target, label=None, color=None, **opts):
         cls = ChargeDischargeData
         if not data.is_col_ready(cls.step_capacity.name):
             integrate_capacity(data)
@@ -51,7 +51,7 @@ class DqDv(Plotter[ChargeDischargeData]):
     cycle: int | t.Collection[int] | None = None
     add_ax_labels: bool = True
 
-    def _plot(self, data, target, label=None, **opts):
+    def _plot(self, data, target, label=None, color=None, **opts):
         cls = ChargeDischargeData
 
         if not data.is_col_ready(cls.dqdv.name):
@@ -79,7 +79,7 @@ class ColeCole(Plotter[EISData]):
     add_ax_labels: bool = True
     set_aspect: bool = True
 
-    def _plot(self, data, target, label=None, **opts):
+    def _plot(self, data, target, label=None, color=None, **opts):
         cls = EISData
         x = data.re_Z
         y = data.im_Z
@@ -95,7 +95,7 @@ class ColeCole(Plotter[EISData]):
 class BodeTheta(Plotter[EISData]):
     add_ax_labels :bool = True
 
-    def _plot(self, data, target, label=None, **opts):
+    def _plot(self, data, target, label=None, color=None, **opts):
         cls = EISData
         if not data.is_col_ready(cls.theta.name):
             calc_z_theta(data)
@@ -111,7 +111,7 @@ class BodeTheta(Plotter[EISData]):
 class BodeZ(Plotter[EISData]):
     add_ax_labels :bool = True
 
-    def _plot(self, data, target, label=None, **opts):
+    def _plot(self, data, target, label=None, color=None, **opts):
         cls = EISData
         if not data.is_col_ready(cls.theta.name):
             calc_z_theta(data)
@@ -130,7 +130,7 @@ class CycleSummary(Plotter[CycleSummaryData]):
     value: t.Literal['capacity', 'energy'] = 'capacity'
     add_ax_labels: bool = True
 
-    def _plot(self, data, target, label=None, **opts):
+    def _plot(self, data, target, label=None, color=None, **opts):
         x = data.cycle
         col_y = f'{self.value}_{self.state}_retention' if self.mode == 'retention' \
                     else f'{self.value}_{self.state}'
