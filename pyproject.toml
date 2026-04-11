@@ -33,9 +33,23 @@ dependencies = [
   "pydantic",
   "webcolors",
   "pint",
-  "eval-type-backport ; python_version <= \"3.8\""
+  "eval-type-backport ; python_version < \"3.9\""
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["exptoolkit*", "batanalysis*"]
+
+[tool.tox]
+env_list = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.tox.env_run_base]
+description = "Run tests with pytest"
+deps = [
+    "pytest"
+]
+commands = [
+    ["python", "-m", "pip", "install", "--upgrade", "pip"],
+    ["python", "-m", "pip", "install", "."],
+    ["pytest", "tests"]
+]
