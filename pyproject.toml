@@ -30,7 +30,8 @@ classifiers = [
 dependencies = [
   "numpy",
   "polars",
-  "pydantic"
+  "pydantic",
+  "webcolors"
 ]
 
 [tool.setuptools.packages.find]
