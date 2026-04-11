@@ -1,19 +1,23 @@
 from __future__ import annotations
 import re
 import typing as t
-from pydantic import BaseModel, Field
+from dataclasses import dataclass
 import webcolors
 
 ColorLike = t.Union["str", "tuple[float, float, float]", "tuple[float, float, float, float]"]
 
-class Color(BaseModel):
-    r: float = Field(ge=0.0, le=1.0)
-    g: float = Field(ge=0.0, le=1.0)
-    b: float = Field(ge=0.0, le=1.0)
-    a: float = Field(1.0, ge=0.0, le=1.0)
+@dataclass(frozen=True)
+class Color:
+    r: float
+    g: float
+    b: float
+    a: float = 1.0
 
-    def __init__(self, r: float, g: float, b: float, a: float = 1.0):
-        super().__init__(r=r, g=g, b=b, a=a)
+    def __post_init__(self):
+        for c in ("r", "g", "b", "a"):
+            val = getattr(self, c)
+            if val < 0 or val > 1:
+                raise ValueError(f'Color value {repr(c)} must be between 0 and 1, given: {repr(val)}')
 
     @t.overload
     def as_rgb_int(self, include_alpha: t.Literal[False] = False) -> tuple[int, int, int]: ...

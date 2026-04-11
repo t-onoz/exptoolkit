@@ -52,6 +52,5 @@ with TemporaryDirectory() as tmpdir:
     scanner.load_cache(buf)
 
     print('----- results -----')
-    pprint(repo.stats())
     print(*(repr(dr) for dr in repo.iter_resources()), sep='\n')
     pprint(scanner._cache)

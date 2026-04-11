@@ -3,9 +3,10 @@ import re
 import typing as t
 import json
 import os
-from pydantic import BaseModel, ConfigDict, Field
+from dataclasses import dataclass, asdict
 
-class DataResource(BaseModel):
+@dataclass(frozen=True)
+class DataResource:
     """
     Identifies an external resource as a string. `ref` can point to local files, URLs,
     or files inside archives (nested paths via "::" like "inner/path::archive.zip").
@@ -14,13 +15,10 @@ class DataResource(BaseModel):
 
     `type_` represents additional information about a resource ("raw", "csv", etc.).
     """
-    model_config = ConfigDict(frozen=True)
     ref: str
-    type_: str | None = Field(default=None)
+    type_: str | None = None
 
-class MeasurementID(BaseModel):
-    model_config = ConfigDict(frozen=True)
-    value: str
+MeasurementID = t.NewType("MeasurementID", str)
 
 class ResourceRepo:
     """
@@ -48,7 +46,7 @@ class ResourceRepo:
         self._ref2samples: dict[str, set[str]] = {}
 
     def add(self, ref: str, *,
-            measurement_id: str | MeasurementID,
+            measurement_id: str,
             samples: str | t.Iterable[str],
             data_type: str | None = None
             ) -> DataResource:
@@ -65,10 +63,7 @@ class ResourceRepo:
             The registered DataSource.
         """
         dr = DataResource(ref=ref, type_=data_type)
-        if isinstance(measurement_id, MeasurementID):
-            mid = measurement_id
-        else:
-            mid = MeasurementID(value=measurement_id)
+        mid = MeasurementID(measurement_id)
 
         # enforce many-to-one relation between DataResource and Measurement
         if dr.ref in self._ref2m:
@@ -133,7 +128,7 @@ class ResourceRepo:
         data_type = dr_before.type_
 
         self.remove(ref_before)
-        self.add(ref_after, measurement_id=mid.value, samples=samples, data_type=data_type)
+        self.add(ref_after, measurement_id=mid, samples=samples, data_type=data_type)
 
     def by_sample(self, sample: str) -> list[DataResource]:
         """Find resources by sample name (exact match, fast)."""
@@ -148,11 +143,13 @@ class ResourceRepo:
 
     def by_measurement(self, id_: str) -> list[DataResource]:
         """Return data sources belonging to a measurement."""
-        return [self._ref2d[ref] for ref in self._m2ref.get(MeasurementID(value=id_), set())]
+        mid = MeasurementID(id_)
+        return [self._ref2d[ref] for ref in self._m2ref.get(mid, set())]
 
     def samples_by_measurement(self, id_: str) -> list[str]:
         """Return unique sample names associated with a measurement."""
-        refs = self._m2ref.get(MeasurementID(value=id_), set())
+        mid = MeasurementID(id_)
+        refs = self._m2ref.get(mid, set())
         return list({
             s for ref in refs for s in self._ref2samples[ref]
         })
@@ -213,8 +210,8 @@ class ResourceRepo:
     def save(self, file: str | os.PathLike | t.IO[str], **json_kw) -> None:
         """Save ResourceRepo to a JSON file."""
         data: ResourceRepoData = {
-            "resources": [dr.model_dump() for dr in self._ref2d.values()],
-            "ref2m": {ref: mid.model_dump() for ref, mid in self._ref2m.items()},
+            "resources": [asdict(dr) for dr in self._ref2d.values()],
+            "ref2m": dict(self._ref2m),
             "ref2samples": {ref: list(samples) for ref, samples in self._ref2samples.items()},
         }
         json_kw.setdefault("indent", 2)
@@ -244,7 +241,7 @@ class ResourceRepo:
         # 2. measurements
         for ref, mid_dump in data["ref2m"].items():
             dr = repo._ref2d[ref]
-            mid = MeasurementID(**mid_dump)
+            mid = MeasurementID(mid_dump)
             repo._ref2m[dr.ref] = mid
             repo._m2ref.setdefault(mid, set()).add(ref)
 
@@ -269,7 +266,7 @@ class ResourceRepo:
             for s in sorted(self._ref2samples[ref]):
                 yield {
                     "ref": ref,
-                    "measurement_id": self._ref2m[ref].value,
+                    "measurement_id": self._ref2m[ref],
                     "data_type": dr.type_,
                     "sample": s,
                 }
@@ -298,6 +295,12 @@ class ResourceRepo:
         return df
 
 class ResourceRepoData(t.TypedDict):
+    """Typed structure for JSON serialization of a ResourceRepo.
+
+    - resources: list of serialized DataResource objects.
+    - ref2m: mapping from resource ref to serialized MeasurementID.
+    - ref2samples: mapping from resource ref to associated sample names.
+    """
     resources: list[dict[str, t.Any]]
-    ref2m: dict[str, dict[str, t.Any]]
+    ref2m: dict[str, t.Any]
     ref2samples: dict[str, list[str]]

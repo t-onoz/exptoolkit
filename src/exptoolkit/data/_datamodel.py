@@ -8,18 +8,23 @@ from typing import Any, TYPE_CHECKING, overload, NamedTuple, TypeVar
 from copy import copy
 from functools import lru_cache
 from logging import getLogger
+
 import polars as pl
-import pint
 
 if TYPE_CHECKING:
     import numpy as np
     import numpy.typing as npt
     import pandas as pd
     from polars._typing import FrameInitTypes, IntoExprColumn
+    from pint import UnitRegistry
 
 logger = getLogger()
 
-ureg = pint.UnitRegistry()  # type: pint.UnitRegistry
+# `import pint` takes some time, so perform lazy import
+@lru_cache
+def load_ureg() -> UnitRegistry:
+    import pint
+    return pint.UnitRegistry()
 
 M = TypeVar('M', bound="BaseData")
 
@@ -50,6 +55,7 @@ def conversion_factor(
 ) -> float | int:
     """returns a unit conversion factor.
     e.g. conversion_factor('m', 's', 'mm/s') -> 1000.0"""
+    ureg = load_ureg()
     base = base_unit or 'dimensionless'
     norm = normalize_unit or 'dimensionless'
     to = to_unit or 'dimensionless'
@@ -192,6 +198,7 @@ class BaseData(SchemaMixin):
     def get_unit(self, column: str, fmt='~P') -> str:
         """gets the unit associated with the given column.
         considers current normalization information."""
+        ureg = load_ureg()
         base = self.schema[column].base_unit
         role = self.schema[column].role
         norm = self.norm.unit or 'dimensionless'

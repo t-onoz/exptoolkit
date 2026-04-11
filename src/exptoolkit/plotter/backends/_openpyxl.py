@@ -2,7 +2,7 @@ from __future__ import annotations
 from itertools import zip_longest
 from logging import getLogger
 from typing import Literal, TYPE_CHECKING
-import numpy as np
+
 try:
     from openpyxl.worksheet.worksheet import Worksheet
     from openpyxl.chart import ScatterChart, Reference, Series
@@ -46,7 +46,7 @@ class OpenPyXlTarget(Target):
         prefix = label + "_" if label else ""
         self.ws.cell(row=1, column=max_col + 1, value = prefix + str(getattr(x, "name", "x")))
         self.ws.cell(row=1, column=max_col + 2, value = prefix + str(getattr(y, "name", "y")))
-        for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=np.nan)):
+        for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=float('nan'))):
             self.ws.cell(row=i + 2, column=max_col + 1, value = x_val)
             self.ws.cell(row=i + 2, column=max_col + 2, value = y_val)
         x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=len(x)+1)
@@ -68,7 +68,7 @@ class OpenPyXlTarget(Target):
         prefix = label + "_" if label else ""
         self.ws.cell(row=1, column=max_col + 1, value=prefix + str(getattr(x, "name", "x")))
         self.ws.cell(row=1, column=max_col + 2, value=prefix + str(getattr(y, "name", "y")))
-        for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=np.nan)):
+        for i, (x_val, y_val) in enumerate(zip_longest(x, y, fillvalue=float('nan'))):
             self.ws.cell(row=i + 2, column=max_col + 1, value=x_val)
             self.ws.cell(row=i + 2, column=max_col + 2, value=y_val)
         x_ref = Reference(self.ws, min_col=max_col + 1, min_row=2, max_row=1 + len(x))
