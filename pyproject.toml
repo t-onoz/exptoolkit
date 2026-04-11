@@ -31,7 +31,8 @@ dependencies = [
   "numpy",
   "polars",
   "pydantic",
-  "webcolors"
+  "webcolors",
+  "pint",
 ]
 
 [tool.setuptools.packages.find]
