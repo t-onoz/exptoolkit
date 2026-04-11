@@ -3,9 +3,10 @@ from typing import cast, Literal, TYPE_CHECKING
 from logging import getLogger
 import polars as pl
 import numpy as np
-from scipy.signal import savgol_filter
+
 from exptoolkit.processing import Modifier, Converter
 from batanalysis.data import ChargeDischargeData, State, CycleSummaryData, EISData
+from batanalysis._savgol import savgol_filter_np
 
 logger = getLogger()
 
@@ -156,8 +157,8 @@ def _differentiate_step(g: pl.DataFrame, window_in_volt, polyorder) -> pl.DataFr
 
     logger.info('window_length of (cycle, step) = (%s, %s): %s',
                 cycle, step, wl)
-    dq = savgol_filter(q_, window_length=wl, polyorder=polyorder, deriv=1)
-    dv = savgol_filter(v_, window_length=wl, polyorder=polyorder, deriv=1)
+    dq = savgol_filter_np(q_, window_length=wl, polyorder=polyorder, deriv=1)
+    dv = savgol_filter_np(v_, window_length=wl, polyorder=polyorder, deriv=1)
     dqdv_full[mask] = dq / dv
     dvdq_full[mask] = dv / dq
 
