@@ -18,8 +18,8 @@ class ScanResult(BaseModel):
     model_config = ConfigDict(frozen=True)
     ref: str
     measurement_id: str
-    samples: str | tuple[str, ...]
-    data_type: str | None = None
+    samples: t.Union[str, tuple[str, ...]]
+    data_type: t.Union[str, None] = None
 
 
 class ResourceScanner(ABC):
