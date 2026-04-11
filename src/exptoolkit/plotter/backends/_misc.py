@@ -1,21 +1,24 @@
 from __future__ import annotations
 import typing as t
 import sys
+from logging import getLogger
 from importlib import import_module
 
 from exptoolkit.plotter.backends._base import Target
+
+logger = getLogger(__name__)
 
 if t.TYPE_CHECKING:
     # why "if TYPE_CHECKING"?
     # Because these imports are only needed for type checking
     # and would cause unnecessary dependencies at runtime.
     from matplotlib.axes import Axes
-    from plotly.graph_objects import Figure
+    from plotly.graph_objects import Figure as PlotlyFigure
     from pyqtgraph import PlotWidget, PlotItem
     from openpyxl.worksheet.worksheet import Worksheet
     from openpyxl.chart import ScatterChart
     TargetLike = t.Union[
-        Target, Axes, Figure, tuple[Figure, int, int],
+        Target, Axes, PlotlyFigure, tuple[PlotlyFigure, int, int],
         PlotWidget, PlotItem,  Worksheet, tuple[Worksheet, t.Optional[ScatterChart]]
         ]
 else:
@@ -38,13 +41,25 @@ def get_target(obj: TargetLike) -> Target:
     for pkg_name, (module_name, cls_name) in _registry.items():
         if pkg_name not in sys.modules:
             continue
+
+        try:
+            module = import_module(module_name)
+        except ImportError:
+            logger.warning(
+                "Backend '%s' is available but failed to load (%s)",
+                pkg_name, module_name
+            )
+            logger.debug("Import error details", exc_info=True)
+            continue
         available_backends.append(pkg_name)
-        module = import_module(module_name)
         cls: type[Target] = getattr(module, cls_name)
+
         try:
             return cls.from_obj(obj)
         except (TypeError, ValueError):
             continue
+    if not available_backends:
+        raise RuntimeError('No plotting backend is available.')
     raise ValueError(f"Could not create Target from object: {obj}. "
-                     f"Object does not match any registered backend targets."
-                     f"Available backends: {available_backends}")
+                    f"Object does not match any registered backend targets."
+                    f"Available backends: {available_backends}")
