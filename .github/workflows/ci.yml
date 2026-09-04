@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tox:
+    name: tox (${{ matrix.toxenv }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toxenv: py39
+            python-version: "3.9"
+          - toxenv: py310
+            python-version: "3.10"
+          - toxenv: py311
+            python-version: "3.11"
+          - toxenv: py312
+            python-version: "3.12"
+          - toxenv: py313
+            python-version: "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install "${{ matrix.python-version }}"
+
+      - name: Run tox
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+        run: uv run --locked tox -e "${{ matrix.toxenv }}"
+
+  quality:
+    name: Tests and quality checks (Python 3.13)
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.13"
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Sync all extras
+        run: uv sync --locked --all-extras
+
+      - name: Run pytest with all extras
+        run: uv run --locked pytest
+
+      - name: Run Ruff lint
+        run: uv run --locked ruff check .
+
+      - name: Check Ruff formatting
+        run: uv run --locked ruff format --check .
+
+      - name: Run mypy
+        run: uv run --locked mypy src
